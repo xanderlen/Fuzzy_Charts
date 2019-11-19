@@ -9,47 +9,75 @@ import android.graphics.Point;
 import android.view.MotionEvent;
 import android.view.View;
 
+import java.util.ArrayList;
+
 public class DiagramView extends View {
-    Paint paint;
-    Path path;
+    Controller controller = Controller.getController();
+    ArrayList<Shape> diagramShapes;
+    Path diagramPath;
+    Shape handDrawnShape;
+    Path handDrawnPath;
+    Paint shapeAttributes;
 
     public DiagramView(Context context) {
         super(context);
-        path = new Path();
-        paint = new Paint();
-        paint.setAntiAlias(true);
-        paint.setStyle(Paint.Style.STROKE);
-        paint.setColor(Color.BLUE);
-        paint.setStrokeWidth(5);
+        diagramShapes = new ArrayList<>();
+        diagramPath = new Path();
+        handDrawnPath = new Path();
+        shapeAttributes = new Paint();
+        shapeAttributes.setAntiAlias(true);
+        shapeAttributes.setStyle(Paint.Style.STROKE);
+        shapeAttributes.setColor(Color.BLUE);
+        shapeAttributes.setStrokeWidth(5);
     }
 
     public boolean onTouchEvent(MotionEvent event) {
         super.onTouchEvent(event);
         switch (event.getAction()) {
             case MotionEvent.ACTION_DOWN: {
-                path = new Path();
-                Point p = new Point((int) event.getX(), (int) event.getY());
-                path.moveTo(p.x, p.y);
-                invalidate();
+                handDrawnShape = new Shape();
+                handDrawnPath = new Path();
+                Point vertex = new Point((int) event.getX(), (int) event.getY());
+                handDrawnShape.vertices.add(vertex);
+                handDrawnPath.moveTo(vertex.x, vertex.y);
                 break;
             }
             case MotionEvent.ACTION_MOVE: {
-                Point p = new Point((int) event.getX(), (int) event.getY());
-                path.lineTo(p.x, p.y);
+                Point vertex = new Point((int) event.getX(), (int) event.getY());
+                handDrawnShape.vertices.add(vertex);
+                handDrawnPath.lineTo(vertex.x, vertex.y);
                 invalidate();
                 break;
             }
             case MotionEvent.ACTION_UP: {
-                path.close();
+                Shape diagramShape = controller.processHandDrawnShape(handDrawnShape);
+                diagramShapes.add(diagramShape);
+                diagramPath.addPath(convertShapeToPath(diagramShape));
+                handDrawnPath.reset();
+                invalidate();
                 break;
             }
         }
         return true;
     }
 
+    private Path convertShapeToPath(Shape shape) {
+        Path path = new Path();
+
+        Point startPoint = shape.vertices.remove(0);
+        path.moveTo(startPoint.x, startPoint.y);
+
+        for (Point point : shape.vertices) {
+            path.lineTo(point.x, point.y);
+        }
+
+        return path;
+    }
+
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
-        canvas.drawPath(path, paint);
+        canvas.drawPath(diagramPath, shapeAttributes);
+        canvas.drawPath(handDrawnPath, shapeAttributes);
     }
 }
