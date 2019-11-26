@@ -50,9 +50,15 @@ public class DiagramView extends View {
                 break;
             }
             case MotionEvent.ACTION_UP: {
-                Shape diagramShape = controller.processHandDrawnShape(handDrawnShape);
-                diagramShapes.add(diagramShape);
-                diagramPath.addPath(convertShapeToPath(diagramShape));
+                // Shape diagramShape = controller.processHandDrawnShape(handDrawnShape);
+                // diagramShapes.add(diagramShape);
+
+                diagramShapes.add(handDrawnShape); // delete
+
+                // diagramPath.addPath(convertShapeToPath(diagramShape));
+
+                diagramPath.addPath(convertShapeToPath(handDrawnShape)); // delete
+
                 handDrawnPath.reset();
                 invalidate();
                 break;

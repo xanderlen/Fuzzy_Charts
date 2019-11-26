@@ -10,7 +10,7 @@ class Controller {
     }
 
     Shape processHandDrawnShape(Shape handDrawnShape) {
-        Shape recognizedShape = shapeRecognizer.recognizeShape(handDrawnShape);
-        return recognizedShape;
+        Shape standardShape = shapeRecognizer.recognizeShape(handDrawnShape);
+        return standardShape;
     }
 }
