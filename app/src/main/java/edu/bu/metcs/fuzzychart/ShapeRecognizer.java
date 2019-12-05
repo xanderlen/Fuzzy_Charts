@@ -8,6 +8,7 @@ import java.util.Arrays;
 
 class ShapeRecognizer {
     private static ShapeRecognizer shapeRecognizer;
+    GraphUtilities graphUtilities = GraphUtilities.getGraphUtilities();
     final private int INITIAL_MIN_POINTS_PER_LINE = 3;
     final private int INITIAL_MAX_LINE_DIRECTION_DEVIATION = 15;
     final private int FINAL_MIN_POINTS_PER_LINE = 6;
@@ -21,7 +22,7 @@ class ShapeRecognizer {
 
     /********************************************************************************************
      *
-     *  Analyze and process the specified input shape, defined by a set of vertices which when
+     *  Analyze and process the specified input shape, defined by a set of getVertices() which when
      *  connected together forms the shape, to derive and build a corresponding standard output
      *  shape (e.g. square or triangle).
      *
@@ -39,10 +40,9 @@ class ShapeRecognizer {
                 simplifiedShape,
                 INITIAL_MAX_LINE_DIRECTION_DEVIATION);
 
-        Log.e("Shape", "Shape Type (initial) = " + standardizedShape.shapeType);
+        Log.e("Shape", "Shape Type (initial) = " + standardizedShape.getShapeType());
 
-        if (!standardizedShape.shapeType.equals("Circle")
-                && !standardizedShape.shapeType.equals("Straight Line")) {
+        if (!Arrays.asList("Dot", "Circle", "Straight Line").contains(standardizedShape.getShapeType())) {
             simplifiedShape = simplifyShape(
                     shape,
                     FINAL_MIN_POINTS_PER_LINE,
@@ -51,23 +51,23 @@ class ShapeRecognizer {
                     simplifiedShape,
                     FINAL_MAX_LINE_DIRECTION_DEVIATION);
 
-            Log.e("Shape", "Shape Type (final) = " + standardizedShape.shapeType);
+            Log.e("Shape", "Shape Type (final) = " + standardizedShape.getShapeType());
         }
 
         return standardizedShape;
     }
 
-    Shape simplifyShape(Shape shape, int minPointsPerLine, double maxLineDirectionDeviation) {
+    private Shape simplifyShape(Shape shape, int minPointsPerLine, double maxLineDirectionDeviation) {
         Shape simplifiedShape = new Shape();
 
-        if (shape.vertices.size() <= 3) {
-            simplifiedShape.vertices.addAll(shape.vertices);
+        if (shape.getSize() <= 3) {
+            simplifiedShape.getVertices().add(shape.getVertices().get(0));
         } else {
             double lineDirection = -1;
             int newSegment_NumPoints = 0;
             Point newSegment_StartPoint = null;
             double newSegment_Direction = -1;
-            Point previousPoint = shape.vertices.get(0);
+            Point previousPoint = shape.getVertices().get(0);
 
             Log.e("Shape: ", "*** INPUT SHAPE ***");
             Log.e("Shape: ", "    Direction");
@@ -75,14 +75,14 @@ class ShapeRecognizer {
             /* ***********************************************************************
              * Analyze and process all points in the input shape.
              *************************************************************************/
-            for (int vertexNum = 1; vertexNum < shape.vertices.size(); vertexNum++) {
-                Point point = shape.vertices.get(vertexNum);
+            for (int vertexNum = 1; vertexNum < shape.getSize(); vertexNum++) {
+                Point point = shape.getVertices().get(vertexNum);
 
                 /* ************************************************
                  * Determine the line segment direction defined by
                  * the next two points of the input shape...
                  **************************************************/
-                double lineSegmentDirection = getLineDirection(previousPoint, point);
+                double lineSegmentDirection = graphUtilities.getLineDirection(previousPoint, point);
 
                 /* ************************************************
                  * ...and if that direction differs from the
@@ -90,7 +90,7 @@ class ShapeRecognizer {
                  * by a certain amount, then start a new segment
                  * in the recognized shape with the new direction.
                  **************************************************/
-                if (compareLineDirections
+                if (graphUtilities.compareLineDirections
                         (lineSegmentDirection,
                                 lineDirection,
                                 maxLineDirectionDeviation) != 0) {
@@ -98,7 +98,7 @@ class ShapeRecognizer {
                         newSegment_StartPoint = previousPoint;
                         newSegment_NumPoints = 2;
                         newSegment_Direction = lineSegmentDirection;
-                    } else if (compareLineDirections(
+                    } else if (graphUtilities.compareLineDirections(
                             lineSegmentDirection,
                             newSegment_Direction,
                             maxLineDirectionDeviation) != 0) {
@@ -107,18 +107,18 @@ class ShapeRecognizer {
                     }
 
                     if (newSegment_NumPoints >= minPointsPerLine) {
-                        simplifiedShape.vertices.add(newSegment_StartPoint);
+                        simplifiedShape.getVertices().add(newSegment_StartPoint);
                         lineDirection = newSegment_Direction;
                         newSegment_NumPoints = 0;
-                        Log.e("Shape", "        " + String.valueOf(lineDirection) + " <-- Direction change");
+                        Log.e("Shape", "        " + lineDirection + " <-- Direction change");
                     } else {
                         newSegment_NumPoints++;
-                        Log.e("Shape", "        " + String.valueOf(lineSegmentDirection) + " <");
+                        Log.e("Shape", "        " + lineSegmentDirection + " <");
                     }
 
                 } else {
                     newSegment_NumPoints = 0;
-                    Log.e("Shape", "        " + String.valueOf(lineSegmentDirection));
+                    Log.e("Shape", "        " + lineSegmentDirection);
                 }
                 previousPoint = point;
             }
@@ -126,43 +126,44 @@ class ShapeRecognizer {
             /* ************************************************
              * Add the last point to the recognized shape.
              **************************************************/
-            simplifiedShape.vertices.add(previousPoint);
+            simplifiedShape.getVertices().add(previousPoint);
         }
         return simplifiedShape;
     }
 
     private Shape standardizeShape(Shape shape, double maxLineDirectionDeviation) {
-        boolean closedShape = getPointsDistance(
-                shape.vertices.get(0),
-                shape.vertices.get(shape.vertices.size() - 1))
-                <= MAX_CLOSED_SHAPE_END_POINTS_DISTANCE;
-        boolean sameCurvature = shapeHasHomogeneousCurvature(
-                shape,
-                maxLineDirectionDeviation);
+        int longestSideLength = 0;
+        int shortestSideLength = 0;
 
-        String shapeType;
-        if (closedShape) {
-            if (sameCurvature) {
-                shapeType = getClosedShapeType(shape);
-            } else {
-                shapeType = "Polygon";
-            }
+        String shapeType = shape.calculateShapeType(;
+
+        if (shape.getSize() == 1) {
+            shapeType = "Dot";
         } else {
-            if (shape.vertices.size() == 2) {
-                shapeType ="Straight Line";
-            } else {
-                shapeType = "Segmented Line";
-            }
-        }
+            boolean closedShape = graphUtilities.getPointsDistance(
+                    shape.getVertices().get(0),
+                    shape.getVertices().get(shape.getSize() - 1))
+                    <= MAX_CLOSED_SHAPE_END_POINTS_DISTANCE;
 
-        int longestSideLength = getVerticesMinOrMax(
-                shape.vertices,
-                "Max",
-                "Length");
-        int shortestSideLength = getVerticesMinOrMax(
-                shape.vertices,
-                "Min",
-                "Length");
+            boolean sameCurvature = shape.shapeHasHomogeneousCurvature(maxLineDirectionDeviation);
+
+            if (closedShape) {
+                if (sameCurvature) {
+                    shapeType = shape.findClosedShapeType();
+                } else {
+                    shapeType = "Polygon";
+                }
+            } else {
+                if (shape.getSize() == 2) {
+                    shapeType = "Straight Line";
+                } else {
+                    shapeType = "Segmented Line";
+                }
+            }
+
+            longestSideLength = shape.findShapeMinOrMax("Max","Length");
+            shortestSideLength = shape.findShapeMinOrMax("Min","Length");
+        }
 
         Point origin;
         int length;
@@ -171,11 +172,14 @@ class ShapeRecognizer {
         ArrayList<Point> vertices = new ArrayList<>();
 
         switch (shapeType) {
+            case "Dot":
+                vertices.add(shape.getVertices().get(0));
+                break;
             case "Circle":
-                int maxX = getVerticesMinOrMax(shape.vertices, "Max", "X");
-                int minX = getVerticesMinOrMax(shape.vertices, "Min", "X");
-                int maxY = getVerticesMinOrMax(shape.vertices, "Max", "Y");
-                int minY = getVerticesMinOrMax(shape.vertices, "Min", "Y");
+                int maxX = shape.findShapeMinOrMax("Max", "X");
+                int minX = shape.findShapeMinOrMax("Min", "X");
+                int maxY = shape.findShapeMinOrMax("Max", "Y");
+                int minY = shape.findShapeMinOrMax("Min", "Y");
                 int originX = (maxX + minX) / 2;
                 int originY = (maxY + minY) / 2;
                 int radius = (maxX - minX + maxY - minY) / 4;
@@ -193,9 +197,9 @@ class ShapeRecognizer {
                 height = ((Double)(0.866 * length)).intValue();
 
                 origin = new Point(
-                        (getVerticesMinOrMax(shape.vertices, "Min", "X")
-                                + getVerticesMinOrMax(shape.vertices, "Max", "X")) / 2,
-                        getVerticesMinOrMax(shape.vertices, "Min", "Y"));
+                        (shape.findShapeMinOrMax("Min", "X")
+                                + shape.findShapeMinOrMax("Max", "X")) / 2,
+                        shape.findShapeMinOrMax("Min", "Y"));
 
                 vertices.add(origin);
                 vertices.add(new Point(origin.x + length / 2, origin.y + height));
@@ -207,8 +211,8 @@ class ShapeRecognizer {
                 length =  (longestSideLength + shortestSideLength) / 2;
 
                 origin = new Point(
-                        getVerticesMinOrMax(shape.vertices, "Min", "X"),
-                        getVerticesMinOrMax(shape.vertices, "Min", "Y"));
+                        shape.findShapeMinOrMax("Min", "X"),
+                        shape.findShapeMinOrMax("Min", "Y"));
 
                 vertices.add(origin);
                 vertices.add(new Point(origin.x + length, origin.y));
@@ -219,8 +223,8 @@ class ShapeRecognizer {
 
             case "Horizontal Rectangle":
                 origin = new Point(
-                        getVerticesMinOrMax(shape.vertices, "Min", "X"),
-                        getVerticesMinOrMax(shape.vertices, "Min", "Y"));
+                        shape.findShapeMinOrMax("Min", "X"),
+                        shape.findShapeMinOrMax("Min", "Y"));
 
                 vertices.add(origin);
                 vertices.add(new Point(origin.x + longestSideLength, origin.y));
@@ -231,8 +235,8 @@ class ShapeRecognizer {
 
             case "Vertical Rectangle":
                 origin = new Point(
-                        getVerticesMinOrMax(shape.vertices, "Min", "X"),
-                        getVerticesMinOrMax(shape.vertices, "Min", "Y"));
+                        shape.findShapeMinOrMax("Min", "X"),
+                        shape.findShapeMinOrMax("Min", "Y"));
 
                 vertices.add(origin);
                 vertices.add(new Point(origin.x + shortestSideLength, origin.y));
@@ -246,9 +250,9 @@ class ShapeRecognizer {
                 int halfDiagonal = ((Double)(0.7071 * length)).intValue();
 
                 origin = new Point(
-                        (getVerticesMinOrMax(shape.vertices, "Min", "X")
-                                + getVerticesMinOrMax(shape.vertices, "Max", "X")) / 2,
-                        getVerticesMinOrMax(shape.vertices, "Min", "Y"));
+                        (shape.findShapeMinOrMax("Min", "X")
+                                + shape.findShapeMinOrMax("Max", "X")) / 2,
+                        shape.findShapeMinOrMax("Min", "Y"));
 
                 vertices.add(origin);
                 vertices.add(new Point(origin.x + halfDiagonal, origin.y + halfDiagonal));
@@ -259,174 +263,13 @@ class ShapeRecognizer {
 
             case "Polygon":
             default:
-                for (Point shapeVertex : shape.vertices) {
+                for (Point shapeVertex : shape.getVertices()) {
                     vertices.add(new Point(shapeVertex));
                 }
                 break;
         }
 
-        Shape standardizedShape = new Shape();
-        standardizedShape.shapeType = shapeType;
-        standardizedShape.vertices = vertices;
-
+        Shape standardizedShape = new Shape(shapeType, vertices);
         return standardizedShape;
-    }
-
-    private String getClosedShapeType(Shape shape) {
-        String shapeType;
-        if (shape.vertices.size() == 4) {
-            shapeType = "Triangle";
-        } else if (shape.vertices.size() >= 10) {
-            shapeType = "Circle";
-        } else if (shape.vertices.size() == 5) {
-            double line1Direction = getLineDirection(
-                    shape.vertices.get(0),
-                    shape.vertices.get(1));
-            if ((line1Direction + 45) % 90 > 67 || (line1Direction + 45) % 90 < 23) {
-                shapeType = "Diamond";
-            } else {
-                double line1Length = getPointsDistance(
-                        shape.vertices.get(0),
-                        shape.vertices.get(1));
-                double line2Length = getPointsDistance(
-                        shape.vertices.get(1),
-                        shape.vertices.get(2));
-                if (Math.min(
-                        line1Length,
-                        line2Length) / Math.max(line1Length,
-                        line2Length) >= 0.75) {
-                    shapeType = "Square";
-                } else {
-                    boolean line1IsHorizontal = (line1Direction + 90) % 180 > 135
-                            || (line1Direction + 90) % 180 < 45;
-                    if (line1IsHorizontal && line1Length > line2Length
-                            || !line1IsHorizontal && line1Length < line2Length) {
-                        shapeType = "Horizontal Rectangle";
-                    } else {
-                        shapeType = "Vertical Rectangle";
-                    }
-                }
-            }
-        } else {
-            shapeType = "Polygon";
-        }
-        return shapeType;
-    }
-
-    private boolean shapeHasHomogeneousCurvature(Shape shape, double maxLineDirectionDeviation) {
-        int initialCurvatureDirection = -2;
-        double previousSegmentDirection = -1;
-        boolean homogeneousCurvature = true;
-
-        for (int vertexNum = 1; vertexNum < shape.vertices.size(); vertexNum++) {
-            double segmentDirection = getLineDirection(
-                    shape.vertices.get(vertexNum - 1),
-                    shape.vertices.get(vertexNum));
-            if (previousSegmentDirection > 0) {
-                int directionComparison = compareLineDirections(
-                        previousSegmentDirection,
-                        segmentDirection,
-                        maxLineDirectionDeviation);
-                if (initialCurvatureDirection < -1) {
-                    initialCurvatureDirection = directionComparison;
-                }
-                if (directionComparison != 0 && directionComparison != initialCurvatureDirection) {
-                    homogeneousCurvature = false;
-                    break;
-                }
-            }
-            previousSegmentDirection = segmentDirection;
-        }
-        return homogeneousCurvature;
-    }
-
-    private double getPointsDistance(Point point1, Point point2) {
-        return  Math.sqrt(Math.pow(point2.x - point1.x, 2)
-                + Math.pow(point2.y - point1.y, 2));
-    }
-
-    private double getLineDirection(Point firstPoint, Point secondPoint) {
-        double x_length = secondPoint.x - firstPoint.x;
-        double y_length = secondPoint.y - firstPoint.y;
-        double diagonalLength = Math.sqrt(x_length * x_length + y_length * y_length);
-        double direction = Math.toDegrees(Math.acos(y_length / diagonalLength)) + 180;
-        if (Math.signum(x_length) >= 0) {
-            direction = 360 - direction;
-        }
-        return direction;
-    }
-
-    private int compareLineDirections(double lineDirection1,
-                                      double lineDirection2,
-                                      double maxLineDirectionDeviation) {
-        int comparisonResult = 0;
-
-        if (lineDirection1 < 0 || lineDirection1 > 360 || lineDirection2 < 0 || lineDirection2 > 360) {
-            if (lineDirection2 > lineDirection1) {
-                comparisonResult = -1;
-            } else {
-                comparisonResult = 1;
-            }
-        } else {
-
-            double deltaAcrossZeroPoint = Math.min(lineDirection1, lineDirection2)
-                    + 360 - Math.max(lineDirection1, lineDirection2);
-
-            if (deltaAcrossZeroPoint >= maxLineDirectionDeviation
-                    && Math.abs(lineDirection1 - lineDirection2) >= maxLineDirectionDeviation) {
-                if (lineDirection2 - lineDirection1 > 0) {
-                    comparisonResult = 1;
-                } else {
-                    comparisonResult = -1;
-                }
-                if (deltaAcrossZeroPoint < 180) {
-                    comparisonResult *= -1;
-                }
-            }
-        }
-        return comparisonResult;
-    }
-
-    private int getVerticesMinOrMax(ArrayList<Point> vertices, String minOrMax, String element) {
-        int arraySize = vertices.size();
-        if (element.equals("Length")) {
-            arraySize--;
-        }
-        int[] elementValues = new int[arraySize];
-        int minOrMaxValue;
-
-        Point previousVertex = new Point();
-        int valueNum = 0;
-        int vertexNum = 0;
-        for (Point vertex : vertices) {
-            switch (element) {
-                case "X":
-                    elementValues[valueNum] = vertex.x;
-                    valueNum++;
-                    break;
-                case "Y":
-                    elementValues[valueNum] = vertex.y;
-                    valueNum++;
-                    break;
-                case "Length":
-                    if (vertexNum > 0) {
-                        elementValues[valueNum] = ((Double)getPointsDistance(
-                                previousVertex,
-                                vertex)).intValue();
-                        valueNum++;
-                    }
-                    previousVertex = vertex;
-                    break;
-            }
-            vertexNum++;
-        }
-
-        Arrays.sort(elementValues);
-        if (minOrMax.equals("Min")) {
-            minOrMaxValue = elementValues[0];
-        } else {
-            minOrMaxValue = elementValues[elementValues.length - 1];
-        }
-        return minOrMaxValue;
     }
 }
