@@ -9,6 +9,8 @@ class Shape {
     private String shapeType;
     private ArrayList<Point> vertices;
     private GraphUtilities graphUtilities = GraphUtilities.getGraphUtilities();
+    private final int DEFAULT_MAX_LINE_DIRECTION_DEVIATION = 45;
+    private final int MAX_CLOSED_SHAPE_END_POINTS_DISTANCE = 75;
 
     static Shape getShape() {
         if (shape == null) shape = new Shape();
@@ -26,8 +28,13 @@ class Shape {
     }
 
     String getShapeType() {
+        getShapeType(DEFAULT_MAX_LINE_DIRECTION_DEVIATION);
+        return this.shapeType;
+    }
+
+    String getShapeType(int maxLineDirectionDeviation) {
         if (this.shapeType == null && this.vertices != null) {
-            calculateShapeType();
+            calculateShapeType(maxLineDirectionDeviation);
         }
         return this.shapeType;
     }
@@ -40,11 +47,11 @@ class Shape {
         return this.vertices.size();
     }
 
-    private void calculateShapeType() {
+    private void calculateShapeType(int maxLineDirectionDeviation) {
         boolean closedShape = graphUtilities.getPointsDistance(
                 vertices.get(0),
-                vertices.get(getSize() - 1)
-                        <= MAX_CLOSED_SHAPE_END_POINTS_DISTANCE);
+                vertices.get(getSize() - 1))
+                <= MAX_CLOSED_SHAPE_END_POINTS_DISTANCE;
 
         if (getSize() == 1) {
             shapeType = "Dot";
@@ -92,6 +99,52 @@ class Shape {
         }
     }
 
+    Shape offset(float x,float y) {
+        for (int vertexNum = 0; vertexNum < getSize(); vertexNum++) {
+            vertices.get(vertexNum).x += x;
+            vertices.get(vertexNum).y += y;
+        }
+        return this;
+    }
+
+    private boolean shapeHasHomogeneousCurvature(double maxLineDirectionDeviation) {
+        int initialCurvatureDirection = -2;
+        double previousSegmentDirection = -1;
+        boolean homogeneousCurvature = true;
+
+        for (int vertexNum = 1; vertexNum < getSize(); vertexNum++) {
+            double segmentDirection = graphUtilities.getLineDirection(
+                    vertices.get(vertexNum - 1),
+                    vertices.get(vertexNum));
+            if (previousSegmentDirection > 0) {
+                int directionComparison = graphUtilities.compareLineDirections(
+                        previousSegmentDirection,
+                        segmentDirection,
+                        maxLineDirectionDeviation);
+                if (initialCurvatureDirection < -1) {
+                    initialCurvatureDirection = directionComparison;
+                }
+                if (directionComparison != 0 && directionComparison != initialCurvatureDirection) {
+                    homogeneousCurvature = false;
+                    break;
+                }
+            }
+            previousSegmentDirection = segmentDirection;
+        }
+        return homogeneousCurvature;
+    }
+
+    boolean shapeIsClosed() {
+        return vertices.get(0).equals(vertices.get(getSize() - 1));
+    }
+
+    boolean shapeEnclosesPoint(Point point) {
+        return point.x >= findShapeMinOrMax("Min", "X")
+                && point.x <= findShapeMinOrMax("Max", "X")
+                && point.y >= findShapeMinOrMax("Min", "Y")
+                && point.y <= findShapeMinOrMax("Max", "Y");
+    }
+
     int findShapeMinOrMax(String minOrMax, String element) {
         int arraySize = getSize();
         if (element.equals("Length")) {
@@ -134,36 +187,4 @@ class Shape {
         }
         return minOrMaxValue;
     }
-
-    boolean shapeHasHomogeneousCurvature(double maxLineDirectionDeviation) {
-        int initialCurvatureDirection = -2;
-        double previousSegmentDirection = -1;
-        boolean homogeneousCurvature = true;
-
-        for (int vertexNum = 1; vertexNum < getSize(); vertexNum++) {
-            double segmentDirection = graphUtilities.getLineDirection(
-                    vertices.get(vertexNum - 1),
-                    vertices.get(vertexNum));
-            if (previousSegmentDirection > 0) {
-                int directionComparison = graphUtilities.compareLineDirections(
-                        previousSegmentDirection,
-                        segmentDirection,
-                        maxLineDirectionDeviation);
-                if (initialCurvatureDirection < -1) {
-                    initialCurvatureDirection = directionComparison;
-                }
-                if (directionComparison != 0 && directionComparison != initialCurvatureDirection) {
-                    homogeneousCurvature = false;
-                    break;
-                }
-            }
-            previousSegmentDirection = segmentDirection;
-        }
-        return homogeneousCurvature;
-    }
-
-    boolean shapeEnclosesPoint(Point point) {
-
-    }
-
 }

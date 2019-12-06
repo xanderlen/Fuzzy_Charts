@@ -2,7 +2,7 @@ package edu.bu.metcs.fuzzychart;
 
 class Controller {
     private static Controller controller;
-    ShapeRecognizer shapeRecognizer = ShapeRecognizer.getShapeRecognizer();
+    private ShapeRecognizer shapeRecognizer = ShapeRecognizer.getShapeRecognizer();
 
     static Controller getController() {
         if (controller == null) controller = new Controller();
@@ -10,7 +10,6 @@ class Controller {
     }
 
     Shape processHandDrawnShape(Shape handDrawnShape) {
-        Shape standardShape = shapeRecognizer.recognizeShape(handDrawnShape);
-        return standardShape;
+        return shapeRecognizer.recognizeShape(handDrawnShape);
     }
 }

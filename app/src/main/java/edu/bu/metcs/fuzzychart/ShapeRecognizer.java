@@ -13,7 +13,6 @@ class ShapeRecognizer {
     final private int INITIAL_MAX_LINE_DIRECTION_DEVIATION = 15;
     final private int FINAL_MIN_POINTS_PER_LINE = 6;
     final private int FINAL_MAX_LINE_DIRECTION_DEVIATION = 45;
-    final private int MAX_CLOSED_SHAPE_END_POINTS_DISTANCE = 75;
 
     static ShapeRecognizer getShapeRecognizer() {
         if (shapeRecognizer == null) shapeRecognizer = new ShapeRecognizer();
@@ -131,47 +130,19 @@ class ShapeRecognizer {
         return simplifiedShape;
     }
 
-    private Shape standardizeShape(Shape shape, double maxLineDirectionDeviation) {
-        int longestSideLength = 0;
-        int shortestSideLength = 0;
-
-        String shapeType = shape.calculateShapeType(;
-
-        if (shape.getSize() == 1) {
-            shapeType = "Dot";
-        } else {
-            boolean closedShape = graphUtilities.getPointsDistance(
-                    shape.getVertices().get(0),
-                    shape.getVertices().get(shape.getSize() - 1))
-                    <= MAX_CLOSED_SHAPE_END_POINTS_DISTANCE;
-
-            boolean sameCurvature = shape.shapeHasHomogeneousCurvature(maxLineDirectionDeviation);
-
-            if (closedShape) {
-                if (sameCurvature) {
-                    shapeType = shape.findClosedShapeType();
-                } else {
-                    shapeType = "Polygon";
-                }
-            } else {
-                if (shape.getSize() == 2) {
-                    shapeType = "Straight Line";
-                } else {
-                    shapeType = "Segmented Line";
-                }
-            }
-
-            longestSideLength = shape.findShapeMinOrMax("Max","Length");
-            shortestSideLength = shape.findShapeMinOrMax("Min","Length");
-        }
-
+    private Shape standardizeShape(Shape shape, int maxLineDirectionDeviation) {
         Point origin;
         int length;
         int height;
-
+        int longestSideLength = 0;
+        int shortestSideLength = 0;
+        if (!shape.getShapeType().equals("Dot")) {
+            longestSideLength = shape.findShapeMinOrMax("Max", "Length");
+            shortestSideLength = shape.findShapeMinOrMax("Min", "Length");
+        }
         ArrayList<Point> vertices = new ArrayList<>();
 
-        switch (shapeType) {
+        switch (shape.getShapeType(maxLineDirectionDeviation)) {
             case "Dot":
                 vertices.add(shape.getVertices().get(0));
                 break;
@@ -269,7 +240,6 @@ class ShapeRecognizer {
                 break;
         }
 
-        Shape standardizedShape = new Shape(shapeType, vertices);
-        return standardizedShape;
+        return new Shape(shape.getShapeType(), vertices);
     }
 }
