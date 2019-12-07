@@ -12,7 +12,7 @@ class GraphUtilities {
 
 
     double getPointsDistance(Point point1, Point point2) {
-        return  Math.sqrt(Math.pow(point2.x - point1.x, 2)
+        return Math.sqrt(Math.pow(point2.x - point1.x, 2)
                 + Math.pow(point2.y - point1.y, 2));
     }
 
@@ -27,34 +27,28 @@ class GraphUtilities {
         return direction;
     }
 
-    int compareLineDirections(double lineDirection1,
-                                      double lineDirection2,
-                                      double maxLineDirectionDeviation) {
-        int comparisonResult = 0;
+    double getLineDirectionsDelta(double lineDirection1, double lineDirection2) {
+        double lineDirectionsDelta;
 
         if (lineDirection1 < 0 || lineDirection1 > 360 || lineDirection2 < 0 || lineDirection2 > 360) {
             if (lineDirection2 > lineDirection1) {
-                comparisonResult = -1;
-            } else {
-                comparisonResult = 1;
+                lineDirectionsDelta = 360;
             }
-        } else {
-
+            else {
+                lineDirectionsDelta = -360;
+            }
+        }
+        else {
             double deltaAcrossZeroPoint = Math.min(lineDirection1, lineDirection2)
                     + 360 - Math.max(lineDirection1, lineDirection2);
 
-            if (deltaAcrossZeroPoint >= maxLineDirectionDeviation
-                    && Math.abs(lineDirection1 - lineDirection2) >= maxLineDirectionDeviation) {
-                if (lineDirection2 - lineDirection1 > 0) {
-                    comparisonResult = 1;
-                } else {
-                    comparisonResult = -1;
-                }
-                if (deltaAcrossZeroPoint < 180) {
-                    comparisonResult *= -1;
-                }
+            if (deltaAcrossZeroPoint < 180) {
+                lineDirectionsDelta = -deltaAcrossZeroPoint;
+            }
+            else {
+                lineDirectionsDelta = lineDirection2 - lineDirection1;
             }
         }
-        return comparisonResult;
+        return lineDirectionsDelta;
     }
 }

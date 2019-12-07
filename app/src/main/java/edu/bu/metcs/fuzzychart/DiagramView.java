@@ -6,9 +6,9 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.Point;
-import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
+
 import java.util.ArrayList;
 
 public class DiagramView extends View {
@@ -16,37 +16,178 @@ public class DiagramView extends View {
     String diagramMode;
     boolean mouseDragged;
     Point currentMousePosition;
-    Paint shape_Attributes;
-    Paint selectedShape_Attributes;
-
-    ArrayList<Shape> diagramShapes;
-    Path diagramShapes_Path;
-
-    Shape selectedShape;
-    Path selectedShape_Path;
-
-    Shape handDrawnShape;
-    Path handDrawnShape_Path;
 
     public DiagramView(Context context) {
         super(context);
         diagramMode = "Drawing";
-
-        diagramShapes = new ArrayList<>();
-        diagramShapes_Path = new Path();
-
-        shape_Attributes = new Paint();
-        shape_Attributes.setAntiAlias(true);
-        shape_Attributes.setStyle(Paint.Style.STROKE);
-        shape_Attributes.setColor(Color.BLUE);
-        shape_Attributes.setStrokeWidth(5);
-
-        selectedShape_Attributes = new Paint();
-        selectedShape_Attributes.setAntiAlias(true);
-        selectedShape_Attributes.setStyle(Paint.Style.STROKE);
-        selectedShape_Attributes.setColor(Color.RED);
-        selectedShape_Attributes.setStrokeWidth(5);
     }
+
+    /* ***********************************************************************
+     * Define an inner class to contain the diagram shapes.
+     *************************************************************************/
+
+    private class DiagramShapes {
+        ArrayList<Shape> shapes;
+        Path shapes_Path;
+
+        Shape shape;
+        Path shape_Path;
+        Paint shape_Attributes;
+
+        DiagramShapes() {
+            shapes = new ArrayList<>();
+            shapes_Path = new Path();
+
+            shape = new Shape();
+            shape_Path = new Path();
+
+            shape_Attributes = new Paint();
+            shape_Attributes.setAntiAlias(true);
+            shape_Attributes.setStyle(Paint.Style.STROKE);
+            shape_Attributes.setColor(Color.BLUE);
+            shape_Attributes.setStrokeWidth(5);
+        }
+
+        /* ************************************************
+         * Update shape per the specified command using
+         * the specified vertex.
+         **************************************************/
+
+        void updateShape(String command, Point vertex) {
+            switch (command) {
+                case "Start":
+                    clear();
+                    shape.getVertices().add(vertex);
+                    shape_Path.moveTo(vertex.x, vertex.y);
+                    break;
+                case "Add":
+                    shape.getVertices().add(vertex);
+                    shape_Path.lineTo(vertex.x, vertex.y);
+                    break;
+            }
+        }
+
+        /* ************************************************
+         * Update shape per the specified command using
+         * the specified values.
+         **************************************************/
+
+         void updateShapes(String command, DiagramShapes diagramShapes) {
+            updateShapes(command, diagramShapes,0, 0);
+        }
+
+        /* ************************************************
+         * Update shape per the specified command using
+         * the specified values.
+         **************************************************/
+
+        void updateShapes(String command, DiagramShapes diagramShapes, float x_offset, float y_offset) {
+            switch (command) {
+                case "Add":
+                    shapes.addAll(diagramShapes.shapes);
+                    shapes_Path.addPath(convertShapesToPath(diagramShapes.shapes));
+                    break;
+                case "Offset":
+                    for (Shape shape : shapes) {
+                        shape.offset(x_offset, y_offset);
+                    }
+                    shapes_Path = convertShapesToPath(shapes);
+                    break;
+            }
+        }
+
+        /* ************************************************
+         * Update shapes per the specified command using
+         * the specified shape.
+         **************************************************/
+
+        void updateShapes(String command, Shape shape) {
+            switch (command) {
+                case "Add":
+                    shapes.add(shape);
+                    shapes_Path.addPath(convertShapesToPath(shape));
+                    break;
+                case "Delete":
+                    shapes.remove(shape);
+                    shapes_Path = convertShapesToPath(shapes);
+                    break;
+            }
+        }
+
+        /* ************************************************
+         * Clear the shapes and paths.
+         **************************************************/
+
+        void clear() {
+            shapes.clear();
+            shapes_Path.reset();
+            shape.clear();
+            shape_Path.reset();
+        }
+
+        /* ************************************************
+         * Convert the specified shape to a path and
+         * return it.
+         **************************************************/
+
+        private Path convertShapesToPath(Shape shape) {
+            ArrayList<Shape> shapes = new ArrayList<>();
+            shapes.add(shape);
+            return convertShapesToPath(shapes);
+        }
+
+        /* ************************************************
+         * Convert the specified shapes to a path and
+         * return it.
+         **************************************************/
+
+        private Path convertShapesToPath(ArrayList<Shape> shapes) {
+            Path path = new Path();
+            Path shapePath = new Path();
+            for (Shape shape : shapes) {
+                shapePath.reset();
+                Point startPoint = shape.getVertices().get(0);
+                shapePath.moveTo(startPoint.x, startPoint.y);
+                for (int pointNum = 1; pointNum < shape.getSize(); pointNum++) {
+                    Point point = shape.getVertices().get(pointNum);
+                    shapePath.lineTo(point.x, point.y);
+                }
+                path.addPath(shapePath);
+            }
+            return path;
+        }
+    }
+
+    /* ***********************************************************************
+     * Define the DiagramShapes to be filled and drawn as the user interacts
+     * with the app.
+     *************************************************************************/
+
+    private class NormalShapes extends DiagramShapes {
+        NormalShapes() {
+            shape_Attributes.setColor(Color.BLUE);
+        }
+    }
+
+    private class SelectedShapes extends DiagramShapes {
+        SelectedShapes() {
+            shape_Attributes.setColor(Color.RED);
+        }
+    }
+
+    private class HandDrawnShapes extends DiagramShapes {
+        HandDrawnShapes() {
+            shape_Attributes.setColor(Color.BLACK);
+        }
+    }
+
+    NormalShapes normalShapes = new NormalShapes();
+    HandDrawnShapes handDrawnShapes = new HandDrawnShapes();
+    SelectedShapes selectedShapes = new SelectedShapes();
+
+    /* ***********************************************************************
+     * Process a Touch event.
+     *************************************************************************/
 
     public boolean onTouchEvent(MotionEvent event) {
         super.onTouchEvent(event);
@@ -61,44 +202,41 @@ public class DiagramView extends View {
         return true;
     }
 
+    /* ***********************************************************************
+     * Process a Touch event in Drawing mode.
+     *************************************************************************/
+
     private void processDrawingEvent(MotionEvent event) {
         switch (event.getAction()) {
             case MotionEvent.ACTION_DOWN: {
-                handDrawnShape = new Shape();
-                handDrawnShape_Path = new Path();
-                Point vertex = new Point((int) event.getX(), (int) event.getY());
-                handDrawnShape.getVertices().add(vertex);
-                handDrawnShape_Path.moveTo(vertex.x, vertex.y);
+                handDrawnShapes.updateShape("Start", getEventPoint(event));
                 break;
             }
             case MotionEvent.ACTION_MOVE: {
-                Point vertex = new Point((int) event.getX(), (int) event.getY());
-                handDrawnShape.getVertices().add(vertex);
-                handDrawnShape_Path.lineTo(vertex.x, vertex.y);
+                handDrawnShapes.updateShape("Add", getEventPoint(event));
                 invalidate();
                 break;
             }
             case MotionEvent.ACTION_UP: {
-                Shape diagramShape = controller.processHandDrawnShape(handDrawnShape);
-                if (diagramShape.getShapeType().equals("Dot")) {
-                    if (selectShapeEnclosingPoint(getEventPoint(event))) {
+                Shape processedShape = controller.processHandDrawnShape(handDrawnShapes.shape);
+                if (processedShape.getShapeType().equals("Dot")) {
+                    if (selectShapeAtPoint(getEventPoint(event))) {
                         diagramMode = "Selection";
                     }
-                } else {
-                    diagramShapes.add(diagramShape);
-                    diagramShapes_Path.addPath(convertShapeToPath(diagramShape));
-                    handDrawnShape_Path.reset();
+                }
+                else {
+                    normalShapes.updateShapes("Add", processedShape);
+                    //        handDrawnShapes.clear();
                 }
                 invalidate();
                 break;
             }
-
-            case MotionEvent.ACTION_BUTTON_PRESS: {
-                Log.e("Touch Event", "Button Pressed.");
-                break;
-            }
         }
     }
+
+    /* ***********************************************************************
+     * Process a Touch event in Selection mode.
+     *************************************************************************/
 
     private void processSelectionEvent(MotionEvent event) {
         switch (event.getAction()) {
@@ -109,20 +247,24 @@ public class DiagramView extends View {
             }
             case MotionEvent.ACTION_MOVE: {
                 mouseDragged = true;
-                selectedShape.offset(
+                selectedShapes.updateShapes(
+                        "Offset",
+                        null,
                         event.getX() - currentMousePosition.x,
                         event.getY() - currentMousePosition.y);
-                selectedShape_Path = convertShapeToPath(selectedShape);
                 currentMousePosition = getEventPoint(event);
                 invalidate();
                 break;
             }
             case MotionEvent.ACTION_UP: {
-                deselectShape();
+                deselectShapes();
                 if (mouseDragged) {
                     diagramMode = "Drawing";
-                } else {
-                    if (!selectShapeEnclosingPoint(getEventPoint(event))) diagramMode = "Drawing";
+                }
+                else {
+                    if (!selectShapeAtPoint(getEventPoint(event))) {
+                        diagramMode = "Drawing";
+                    }
                 }
                 invalidate();
                 break;
@@ -130,58 +272,54 @@ public class DiagramView extends View {
         }
     }
 
-    private boolean selectShapeEnclosingPoint(Point point) {
-        selectedShape = null;
-        selectedShape_Path = null;
-        for (Shape shape : diagramShapes) {
+    /* ***********************************************************************
+     * Select the shape at the specified point, if found, by moving it from
+     * normalShapes to selectedShapes. Return boolean indicating if found or
+     * not.
+     *************************************************************************/
+
+    private boolean selectShapeAtPoint(Point point) {
+        boolean shapeSelected = false;
+        for (Shape shape : normalShapes.shapes) {
             if (shape.shapeEnclosesPoint(point)) {
-                selectedShape = shape;
-                diagramShapes.remove(selectedShape);
-                diagramShapes_Path = convertShapesToPath(diagramShapes);
-                selectedShape_Path = convertShapeToPath(selectedShape);
+                selectedShapes.updateShapes("Add", shape);
+                normalShapes.updateShapes("Delete", shape);
+                shapeSelected = true;
                 break;
             }
         }
-        return (selectedShape != null);
+        return shapeSelected;
     }
 
-    private void deselectShape() {
-        if (selectedShape != null) {
-            diagramShapes.add(selectedShape);
-            diagramShapes_Path.addPath(convertShapeToPath(selectedShape));
-            selectedShape = null;
-        }
-        selectedShape_Path = null;
+    /* ***********************************************************************
+     * Deselect all selected shapes by moving them from selectedShapes to
+     * normalShapes.
+     *************************************************************************/
+
+    private void deselectShapes() {
+        normalShapes.updateShapes("Add", selectedShapes);
+        selectedShapes.clear();
     }
 
-    private Path convertShapesToPath(ArrayList<Shape> shapes) {
-        Path path = new Path();
-        for (Shape shape : shapes) {
-            path.addPath(convertShapeToPath(shape));
-        }
-        return path;
-    }
-
-    private Path convertShapeToPath(Shape shape) {
-        Path path = new Path();
-        Point startPoint = shape.getVertices().get(0);
-        path.moveTo(startPoint.x, startPoint.y);
-        for (int pointNum = 1; pointNum < shape.getSize(); pointNum++) {
-            Point point = shape.getVertices().get(pointNum);
-            path.lineTo(point.x, point.y);
-        }
-        return path;
-    }
+    /* ***********************************************************************
+     * Return the point from the specified MotionEvent event.
+     *************************************************************************/
 
     private Point getEventPoint(MotionEvent event) {
         return new Point((int) event.getX(), (int) event.getY());
     }
 
+    /* ***********************************************************************
+     * Draw all normalShapes, selectedShapes, and handDrawnShapes.
+     *************************************************************************/
+
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
-        if (diagramShapes_Path != null) canvas.drawPath(diagramShapes_Path, shape_Attributes);
-        if (selectedShape_Path != null) canvas.drawPath(selectedShape_Path, selectedShape_Attributes);
-        if (handDrawnShape_Path != null) canvas.drawPath(handDrawnShape_Path, shape_Attributes);
+        canvas.drawPath(handDrawnShapes.shapes_Path, handDrawnShapes.shape_Attributes);
+        canvas.drawPath(handDrawnShapes.shape_Path, handDrawnShapes.shape_Attributes);
+
+        canvas.drawPath(normalShapes.shapes_Path, normalShapes.shape_Attributes);
+        canvas.drawPath(selectedShapes.shapes_Path, selectedShapes.shape_Attributes);
     }
 }

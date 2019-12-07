@@ -1,6 +1,8 @@
 package edu.bu.metcs.fuzzychart;
 
 import android.graphics.Point;
+import android.util.Log;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 
@@ -9,7 +11,7 @@ class Shape {
     private String shapeType;
     private ArrayList<Point> vertices;
     private GraphUtilities graphUtilities = GraphUtilities.getGraphUtilities();
-    private final int DEFAULT_MAX_LINE_DIRECTION_DEVIATION = 45;
+    private final double MAX_CURVATURE_DEVIATION = 45;
     private final int MAX_CLOSED_SHAPE_END_POINTS_DISTANCE = 75;
 
     static Shape getShape() {
@@ -28,13 +30,8 @@ class Shape {
     }
 
     String getShapeType() {
-        getShapeType(DEFAULT_MAX_LINE_DIRECTION_DEVIATION);
-        return this.shapeType;
-    }
-
-    String getShapeType(int maxLineDirectionDeviation) {
         if (this.shapeType == null && this.vertices != null) {
-            calculateShapeType(maxLineDirectionDeviation);
+            calculateShapeType();
         }
         return this.shapeType;
     }
@@ -47,31 +44,55 @@ class Shape {
         return this.vertices.size();
     }
 
-    private void calculateShapeType(int maxLineDirectionDeviation) {
-        boolean closedShape = graphUtilities.getPointsDistance(
-                vertices.get(0),
-                vertices.get(getSize() - 1))
-                <= MAX_CLOSED_SHAPE_END_POINTS_DISTANCE;
+    double getCircumference() {
+        double circumference = 0;
+        for (int vertexNum = 1; vertexNum < getSize(); vertexNum++) {
+            circumference += graphUtilities.getPointsDistance(
+                    vertices.get(vertexNum - 1),
+                    vertices.get(vertexNum));
+        }
+        return circumference;
+    }
 
+    void clear() {
+        vertices.clear();
+        shapeType = null;
+    }
+
+    private void calculateShapeType() {
         if (getSize() == 1) {
             shapeType = "Dot";
-        } else if (!closedShape && getSize() == 2) {
+        }
+        else if (!shapeIsClosed() && getSize() == 2) {
             shapeType = "Straight Line";
-        } else if (!closedShape) {
+        }
+        else if (!shapeIsClosed()) {
             shapeType = "Segmented Line";
-        } else if (!shapeHasHomogeneousCurvature(maxLineDirectionDeviation)) {
+        }
+        else if (!shapeHasHomogeneousCurvature()) {
             shapeType = "Polygon";
-        } else if (getSize() == 4) {
+        }
+        else if (getSize() == 4) {
             shapeType = "Triangle";
-        } else if (getSize() >= 10) {
-            shapeType = "Circle";
-        } else if (getSize() == 5) {
+        }
+        else if (getSize() >= 9) {
+            double longestSegmentLength = findShapeMinOrMax("Max", "Segment Length");
+            double circumference = getCircumference();
+            if (longestSegmentLength / circumference < 0.2) {
+                shapeType = "Circle";
+            }
+            else {
+                shapeType = "Polygon";
+            }
+        }
+        else if (getSize() == 5) {
             double line1Direction = graphUtilities.getLineDirection(
                     vertices.get(0),
                     vertices.get(1));
             if ((line1Direction + 45) % 90 > 67 || (line1Direction + 45) % 90 < 23) {
                 shapeType = "Diamond";
-            } else {
+            }
+            else {
                 double line1Length = graphUtilities.getPointsDistance(
                         vertices.get(0),
                         vertices.get(1));
@@ -83,59 +104,83 @@ class Shape {
                         line2Length) / Math.max(line1Length,
                         line2Length) >= 0.75) {
                     shapeType = "Square";
-                } else {
+                }
+                else {
                     boolean line1IsHorizontal = (line1Direction + 90) % 180 > 135
                             || (line1Direction + 90) % 180 < 45;
                     if (line1IsHorizontal && line1Length > line2Length
                             || !line1IsHorizontal && line1Length < line2Length) {
                         shapeType = "Horizontal Rectangle";
-                    } else {
+                    }
+                    else {
                         shapeType = "Vertical Rectangle";
                     }
                 }
             }
-        } else {
+        }
+        else {
             shapeType = "Polygon";
         }
     }
 
-    Shape offset(float x,float y) {
+    void offset(float x, float y) {
         for (int vertexNum = 0; vertexNum < getSize(); vertexNum++) {
             vertices.get(vertexNum).x += x;
             vertices.get(vertexNum).y += y;
         }
-        return this;
     }
 
-    private boolean shapeHasHomogeneousCurvature(double maxLineDirectionDeviation) {
-        int initialCurvatureDirection = -2;
+    private boolean shapeHasHomogeneousCurvature() {
+        double positiveCurvature = 0;
+        double maxPositiveCurvature = 0;
+        double negativeCurvature = 0;
+        double maxNegativeCurvature = 0;
+        double curvatureDelta;
+        double segmentDirection;
         double previousSegmentDirection = -1;
-        boolean homogeneousCurvature = true;
+        boolean hasHomogeneousCurvature = true;
 
         for (int vertexNum = 1; vertexNum < getSize(); vertexNum++) {
-            double segmentDirection = graphUtilities.getLineDirection(
+            segmentDirection = graphUtilities.getLineDirection(
                     vertices.get(vertexNum - 1),
                     vertices.get(vertexNum));
-            if (previousSegmentDirection > 0) {
-                int directionComparison = graphUtilities.compareLineDirections(
+
+            if (previousSegmentDirection >= 0) {
+                curvatureDelta = graphUtilities.getLineDirectionsDelta(
                         previousSegmentDirection,
-                        segmentDirection,
-                        maxLineDirectionDeviation);
-                if (initialCurvatureDirection < -1) {
-                    initialCurvatureDirection = directionComparison;
+                        segmentDirection);
+                if (curvatureDelta > 0) {
+                    positiveCurvature += curvatureDelta;
+                    Log.e("Shape", +positiveCurvature + " <-- Positive curvature");
+
+                    if (positiveCurvature > maxPositiveCurvature) {
+                        maxPositiveCurvature = positiveCurvature;
+                    }
                 }
-                if (directionComparison != 0 && directionComparison != initialCurvatureDirection) {
-                    homogeneousCurvature = false;
+                else {
+                    negativeCurvature += curvatureDelta;
+                    Log.e("Shape", +negativeCurvature + " <-- Negative curvature");
+
+                    if (negativeCurvature < maxNegativeCurvature) {
+                        maxNegativeCurvature = negativeCurvature;
+                    }
+                }
+
+                if (Math.min(maxPositiveCurvature, -maxNegativeCurvature) > MAX_CURVATURE_DEVIATION) {
+                    hasHomogeneousCurvature = false;
                     break;
                 }
             }
             previousSegmentDirection = segmentDirection;
         }
-        return homogeneousCurvature;
+        Log.e("Shape", hasHomogeneousCurvature + " <-- Has Homogeneous Curvature");
+        return hasHomogeneousCurvature;
     }
 
-    boolean shapeIsClosed() {
-        return vertices.get(0).equals(vertices.get(getSize() - 1));
+    private boolean shapeIsClosed() {
+        return graphUtilities.getPointsDistance(vertices.get(0),
+                vertices.get(getSize() - 1))
+                <= MAX_CLOSED_SHAPE_END_POINTS_DISTANCE;
     }
 
     boolean shapeEnclosesPoint(Point point) {
@@ -147,7 +192,7 @@ class Shape {
 
     int findShapeMinOrMax(String minOrMax, String element) {
         int arraySize = getSize();
-        if (element.equals("Length")) {
+        if (element.equals("Segment Length")) {
             arraySize--;
         }
         int[] elementValues = new int[arraySize];
@@ -166,7 +211,7 @@ class Shape {
                     elementValues[valueNum] = vertex.y;
                     valueNum++;
                     break;
-                case "Length":
+                case "Segment Length":
                     if (vertexNum > 0) {
                         elementValues[valueNum] = ((Double) graphUtilities.getPointsDistance(
                                 previousVertex,
@@ -182,7 +227,8 @@ class Shape {
         Arrays.sort(elementValues);
         if (minOrMax.equals("Min")) {
             minOrMaxValue = elementValues[0];
-        } else {
+        }
+        else {
             minOrMaxValue = elementValues[elementValues.length - 1];
         }
         return minOrMaxValue;
