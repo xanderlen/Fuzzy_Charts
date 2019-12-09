@@ -8,7 +8,7 @@ import java.util.Arrays;
 
 class ShapeRecognizer {
     private static ShapeRecognizer shapeRecognizer;
-    GraphUtilities graphUtilities = GraphUtilities.getGraphUtilities();
+    private GraphUtilities graphUtilities = GraphUtilities.getGraphUtilities();
     final private int INITIAL_MIN_LINE_SEGMENT_LENGTH = 10;
     final private int INITIAL_MAX_LINE_DIRECTION_DEVIATION = 20;
     final private int FINAL_MIN_LINE_SEGMENT_LENGTH = 75;
@@ -21,13 +21,13 @@ class ShapeRecognizer {
 
     /********************************************************************************************
      *
-     *  Analyze and process the specified input shape, defined by a set of getVertices() which
-     *  when connected together forms the shape, to derive and build a corresponding standard
-     *  output shape (e.g. square or triangle).
+     *  Analyze and process the specified input currentShape, defined by a set of getVertices() which
+     *  when connected together forms the currentShape, to derive and build a corresponding standard
+     *  output currentShape (e.g. square or triangle).
      *
-     *  @param shape - The input shape.
+     *  @param shape - The input currentShape.
      *
-     *  @return - The standard output shape.
+     *  @return - The standard output currentShape.
      *
      ********************************************************************************************/
 
@@ -69,23 +69,23 @@ class ShapeRecognizer {
             Log.e("Shape: ", "    Direction");
 
             /* ***********************************************************************
-             * Analyze and process all points in the input shape.
+             * Analyze and process all points in the input currentShape.
              *************************************************************************/
             for (int vertexNum = 1; vertexNum < shape.getSize(); vertexNum++) {
                 Point point = shape.getVertices().get(vertexNum);
 
                 /* ************************************************
                  * Determine the line segment direction defined by
-                 * the next two points of the input shape...
+                 * the next two points of the input currentShape...
                  **************************************************/
                 double lineSegmentDirection = graphUtilities.getLineDirection(previousPoint, point);
                 Log.e("Shape", "        " + lineSegmentDirection);
 
                 /* ************************************************
                  * ...and if that direction differs from the
-                 * current line direction of the recognized shape
+                 * current line direction of the recognized currentShape
                  * by a certain amount, then start a new segment
-                 * in the recognized shape with the new direction.
+                 * in the recognized currentShape with the new direction.
                  **************************************************/
                 if (Math.abs(graphUtilities.getLineDirectionsDelta(lineDirection, lineSegmentDirection))
                         < maxLineDirectionDeviation)
@@ -117,7 +117,7 @@ class ShapeRecognizer {
             }
 
             /* ************************************************
-             * Add the last point to the recognized shape.
+             * Add the last point to the recognized currentShape.
              **************************************************/
             simplifiedShape.getVertices().add(previousPoint);
         }

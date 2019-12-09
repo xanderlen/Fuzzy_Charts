@@ -9,37 +9,49 @@ import android.graphics.Point;
 import android.view.MotionEvent;
 import android.view.View;
 
+import java.lang.reflect.Array;
 import java.util.ArrayList;
+import java.util.Arrays;
 
 public class DiagramView extends View {
-    Controller controller = Controller.getController();
-    String diagramMode;
-    boolean mouseDragged;
-    Point currentMousePosition;
+    private Controller controller = Controller.getController();
+    private GraphUtilities graphUtilities = GraphUtilities.getGraphUtilities();
+    private String diagramMode;
+    private boolean deleteMode = false;
+    private boolean mouseDragged;
+    private Point currentMousePosition;
 
     public DiagramView(Context context) {
         super(context);
         diagramMode = "Drawing";
     }
 
+    /*
+     * ============================================================================================
+     * |                                                                                          |
+     * |                              Diagram Shapes Definitions                                  |
+     * |                                                                                          |
+     * ============================================================================================
+     */
+
     /* ***********************************************************************
-     * Define an inner class to contain the diagram shapes.
+     * Define an inner class to handle diagram shapes.
      *************************************************************************/
 
     private class DiagramShapes {
         ArrayList<Shape> shapes;
         Path shapes_Path;
-
-        Shape shape;
-        Path shape_Path;
         Paint shape_Attributes;
+
+        Shape currentShape;
+        Path currentShape_Path;
 
         DiagramShapes() {
             shapes = new ArrayList<>();
             shapes_Path = new Path();
 
-            shape = new Shape();
-            shape_Path = new Path();
+            currentShape = new Shape();
+            currentShape_Path = new Path();
 
             shape_Attributes = new Paint();
             shape_Attributes.setAntiAlias(true);
@@ -49,36 +61,36 @@ public class DiagramView extends View {
         }
 
         /* ************************************************
-         * Update shape per the specified command using
-         * the specified vertex.
+         * Update currentShape per the specified command
+         * using the specified vertex.
          **************************************************/
 
-        void updateShape(String command, Point vertex) {
+        void updateCurrentShape(String command, Point vertex) {
             switch (command) {
-                case "Start":
-                    clear();
-                    shape.getVertices().add(vertex);
-                    shape_Path.moveTo(vertex.x, vertex.y);
+                case "New":
+                    deleteCurrentShape();
+                    currentShape.getVertices().add(vertex);
+                    currentShape_Path.moveTo(vertex.x, vertex.y);
                     break;
                 case "Add":
-                    shape.getVertices().add(vertex);
-                    shape_Path.lineTo(vertex.x, vertex.y);
+                    currentShape.getVertices().add(vertex);
+                    currentShape_Path.lineTo(vertex.x, vertex.y);
                     break;
             }
         }
 
         /* ************************************************
-         * Update shape per the specified command using
-         * the specified values.
+         * Update currentShape per the specified command
+         * using the specified values.
          **************************************************/
 
-         void updateShapes(String command, DiagramShapes diagramShapes) {
-            updateShapes(command, diagramShapes,0, 0);
+        void updateShapes(String command, DiagramShapes diagramShapes) {
+            updateShapes(command, diagramShapes, 0, 0);
         }
 
         /* ************************************************
-         * Update shape per the specified command using
-         * the specified values.
+         * Update currentShape per the specified command
+         * using the specified values.
          **************************************************/
 
         void updateShapes(String command, DiagramShapes diagramShapes, float x_offset, float y_offset) {
@@ -86,6 +98,10 @@ public class DiagramView extends View {
                 case "Add":
                     shapes.addAll(diagramShapes.shapes);
                     shapes_Path.addPath(convertShapesToPath(diagramShapes.shapes));
+                    break;
+                case "Delete":
+                    shapes.removeAll(diagramShapes.shapes);
+                    shapes_Path = convertShapesToPath(shapes);
                     break;
                 case "Offset":
                     for (Shape shape : shapes) {
@@ -98,14 +114,18 @@ public class DiagramView extends View {
 
         /* ************************************************
          * Update shapes per the specified command using
-         * the specified shape.
+         * the specified currentShape.
          **************************************************/
 
-        void updateShapes(String command, Shape shape) {
+        void updateShapes(String command, int shapeNum, Shape shape) {
             switch (command) {
                 case "Add":
                     shapes.add(shape);
                     shapes_Path.addPath(convertShapesToPath(shape));
+                    break;
+                case "Replace":
+                    shapes.set(shapeNum, shape);
+                    shapes_Path = convertShapesToPath(shapes);
                     break;
                 case "Delete":
                     shapes.remove(shape);
@@ -115,18 +135,26 @@ public class DiagramView extends View {
         }
 
         /* ************************************************
-         * Clear the shapes and paths.
+         * Create new shapes and paths.
          **************************************************/
 
-        void clear() {
-            shapes.clear();
-            shapes_Path.reset();
-            shape.clear();
-            shape_Path.reset();
+        void deleteShapes() {
+            shapes = new ArrayList<>();
+            shapes_Path = new Path();
+            currentShape = new Shape();
+            currentShape_Path = new Path();
         }
 
         /* ************************************************
-         * Convert the specified shape to a path and
+         * Create new current shape and path.
+         **************************************************/
+
+        void deleteCurrentShape() {
+            currentShape = new Shape();
+            currentShape_Path = new Path();
+        }
+        /* ************************************************
+         * Convert the specified currentShape to a path and
          * return it.
          **************************************************/
 
@@ -181,9 +209,148 @@ public class DiagramView extends View {
         }
     }
 
+    private class Connectors extends DiagramShapes {
+        ArrayList<Shape> firstConnectingShapes = new ArrayList<>();
+        ArrayList<Shape> secondConnectingShapes = new ArrayList<>();
+
+        Connectors() {
+            shape_Attributes.setColor(Color.MAGENTA);
+        }
+
+        void updateConnectors(String command, int connectorNum, ArrayList<Shape> updaterShapes) {
+            switch (command) {
+                case "Add":
+                    boolean existingConnectorFound = false;
+                    for (int connectorCount = 0; connectorCount < shapes.size(); connectorCount++) {
+                        if (updaterShapes.contains(firstConnectingShapes.get(connectorCount))
+                                && updaterShapes.contains(secondConnectingShapes.get(connectorCount))) {
+                            existingConnectorFound = true;
+                            break;
+                        }
+                    }
+                    if (!existingConnectorFound) {
+                        shapes.add(new Shape());
+                        firstConnectingShapes.add(updaterShapes.get(0));
+                        secondConnectingShapes.add(updaterShapes.get(1));
+                        reconnectConnectors(shapes.size() - 1, null);
+                    }
+                    break;
+                case "Delete":
+                    if (updaterShapes != null) {
+                        updateShapes("Delete", -1, updaterShapes.get(0));
+                        firstConnectingShapes.remove(updaterShapes.get(0));
+                        secondConnectingShapes.remove(updaterShapes.get(0));
+                    }
+                    else {
+                        updateShapes("Delete", -1, shapes.get(connectorNum));
+                        firstConnectingShapes.remove(connectorNum);
+                        secondConnectingShapes.remove(connectorNum);
+                    }
+                    break;
+                case "Remove Broken Connectors":
+                    int connectorCount = 0;
+                    while (connectorCount < shapes.size()) {
+                        if (!normalShapes.shapes.contains(firstConnectingShapes.get(connectorCount))
+                                || !normalShapes.shapes.contains(secondConnectingShapes.get(connectorCount))) {
+                            updateConnectors("Delete", connectorCount, null);
+                        }
+                        else {
+                            connectorCount++;
+                        }
+                    }
+                    break;
+                case "Reconnect":
+                    reconnectConnectors(connectorNum, updaterShapes);
+                    break;
+            }
+        }
+
+        private void reconnectConnectors(int connectorNum, ArrayList<Shape> connectedShapes) {
+            int connectorCount_Start;
+            int connectorCount_End;
+            if (connectorNum < 0) {
+                connectorCount_Start = 0;
+                connectorCount_End = shapes.size() - 1;
+            }
+            else {
+                connectorCount_Start = connectorNum;
+                connectorCount_End = connectorNum;
+            }
+            for (int connectorCount = connectorCount_Start;
+                 connectorCount <= connectorCount_End;
+                 connectorCount++) {
+                if (connectedShapes == null
+                        || connectedShapes.contains(firstConnectingShapes.get(connectorCount))
+                        || connectedShapes.contains(secondConnectingShapes.get(connectorCount)))
+                {
+
+                    Shape[] connectingShapes = new Shape[]{
+                            firstConnectingShapes.get(connectorCount),
+                            secondConnectingShapes.get(connectorCount)};
+                    Point[] connectorPoint = new Point[]{
+                            firstConnectingShapes.get(connectorCount).getCenterPoint(),
+                            secondConnectingShapes.get(connectorCount).getCenterPoint()};
+                    Point[] nextClosestPoint = new Point[2];
+
+                    for (int connectorPointsAdjustmentNum = 0;
+                         connectorPointsAdjustmentNum < 2;
+                         connectorPointsAdjustmentNum++) {
+                        for (int connectorShapeNum = 0; connectorShapeNum < 2; connectorShapeNum++) {
+                            for (int nextClosestPointNum = 0; nextClosestPointNum < 2; nextClosestPointNum++) {
+                                double minConnectorDistance = Double.MAX_VALUE;
+                                for (Point vertex : connectingShapes[connectorShapeNum].getVertices()) {
+                                    if (!vertex.equals(nextClosestPoint[0])) {
+                                        double connectorDistance = graphUtilities.getPointsDistance(
+                                                connectorPoint[1 - connectorShapeNum],
+                                                vertex);
+                                        if (connectorDistance < minConnectorDistance) {
+                                            minConnectorDistance = connectorDistance;
+                                            nextClosestPoint[nextClosestPointNum] = vertex;
+                                        }
+                                    }
+                                }
+                            }
+                            connectorPoint[connectorShapeNum] = new Point(
+                                    (nextClosestPoint[0].x + nextClosestPoint[1].x) / 2,
+                                    (nextClosestPoint[0].y + nextClosestPoint[1].y) / 2);
+                        }
+                    }
+                    updateCurrentShape("New", connectorPoint[0]);
+                    updateCurrentShape("Add", connectorPoint[1]);
+                    double radius = 25;
+                    double angle = graphUtilities.getLineDirection(connectorPoint[0], connectorPoint[1]);
+
+                    int x = ((Double) (radius * Math.sin(Math.toRadians(25 - angle)))).intValue();
+                    int y = ((Double) (radius * Math.cos(Math.toRadians(25 - angle)))).intValue();
+                    Point arrowPoint = new Point(connectorPoint[1].x + x, connectorPoint[1].y + y);
+                    updateCurrentShape("Add", arrowPoint);
+
+                    x = ((Double) (radius * Math.sin(Math.toRadians(-25 - angle)))).intValue();
+                    y = ((Double) (radius * Math.cos(Math.toRadians(-25 - angle)))).intValue();
+                    arrowPoint = new Point(connectorPoint[1].x + x, connectorPoint[1].y + y);
+                    updateCurrentShape("Add", arrowPoint);
+
+                    arrowPoint = new Point(connectorPoint[1].x, connectorPoint[1].y);
+                    updateCurrentShape("Add", arrowPoint);
+
+                    updateShapes("Replace", connectorCount, currentShape);
+                }
+            }
+        }
+    }
+
     NormalShapes normalShapes = new NormalShapes();
     HandDrawnShapes handDrawnShapes = new HandDrawnShapes();
     SelectedShapes selectedShapes = new SelectedShapes();
+    Connectors connectors = new Connectors();
+
+    /*
+     * ============================================================================================
+     * |                                                                                          |
+     * |                                 Touch Event Processing                                   |
+     * |                                                                                          |
+     * ============================================================================================
+     */
 
     /* ***********************************************************************
      * Process a Touch event.
@@ -203,34 +370,69 @@ public class DiagramView extends View {
     }
 
     /* ***********************************************************************
+     * Determine the gesture made and return it.
+     *************************************************************************/
+
+    private String getGesture(MotionEvent event) {
+        String gesture = "None";
+        if (event.getAction() == MotionEvent.ACTION_UP && !mouseDragged) {
+            gesture = "Click";
+        }
+        else if (diagramMode.equals("Selection") && deleteMode) {
+            Shape processedShape = controller.processHandDrawnShape(handDrawnShapes.currentShape);
+            if (processedShape.getShapeType().equals("Straight Line")
+                    && processedShape.shapeOverlaysShape(selectedShapes.shapes.get(0))) {
+                gesture = "Strike-through";
+            }
+            else if (mouseDragged) {
+                gesture = "Drag";
+            }
+        }
+        else if (mouseDragged) {
+            gesture = "Drag";
+        }
+        return gesture;
+    }
+
+    /* ***********************************************************************
      * Process a Touch event in Drawing mode.
      *************************************************************************/
 
     private void processDrawingEvent(MotionEvent event) {
         switch (event.getAction()) {
-            case MotionEvent.ACTION_DOWN: {
-                handDrawnShapes.updateShape("Start", getEventPoint(event));
+            case MotionEvent.ACTION_DOWN:
+                mouseDragged = false;
+                handDrawnShapes.updateCurrentShape("New", getEventPoint(event));
                 break;
-            }
-            case MotionEvent.ACTION_MOVE: {
-                handDrawnShapes.updateShape("Add", getEventPoint(event));
+            case MotionEvent.ACTION_MOVE:
+                mouseDragged = true;
+                handDrawnShapes.updateCurrentShape("Add", getEventPoint(event));
                 invalidate();
                 break;
-            }
-            case MotionEvent.ACTION_UP: {
-                Shape processedShape = controller.processHandDrawnShape(handDrawnShapes.shape);
-                if (processedShape.getShapeType().equals("Dot")) {
-                    if (selectShapeAtPoint(getEventPoint(event))) {
-                        diagramMode = "Selection";
-                    }
+            case MotionEvent.ACTION_UP:
+                switch (getGesture(event)) {
+                    case "Click":
+                        if (selectShapeAtPoint(getEventPoint(event))) {
+                            diagramMode = "Selection";
+                        }
+                        break;
+                    case "Drag":
+                        Shape[] connectingShapes = (getConnectingShapes(handDrawnShapes.currentShape));
+                        if (connectingShapes != null) {
+                            connectShapes(connectingShapes);
+                        }
+                        else {
+                            normalShapes.updateShapes(
+                                    "Add",
+                                    -1,
+                                    controller.processHandDrawnShape(handDrawnShapes.currentShape));
+                        }
+                        handDrawnShapes.deleteShapes();
+                        break;
                 }
-                else {
-                    normalShapes.updateShapes("Add", processedShape);
-                    //        handDrawnShapes.clear();
-                }
+                mouseDragged = false;
                 invalidate();
                 break;
-            }
         }
     }
 
@@ -240,55 +442,110 @@ public class DiagramView extends View {
 
     private void processSelectionEvent(MotionEvent event) {
         switch (event.getAction()) {
-            case MotionEvent.ACTION_DOWN: {
+            case MotionEvent.ACTION_DOWN:
                 mouseDragged = false;
+                deleteMode = false;
                 currentMousePosition = getEventPoint(event);
+                if (getShapeAtPoint(getEventPoint(event), selectedShapes) == null) {
+                    deleteMode = true;
+                    handDrawnShapes.updateCurrentShape("New", getEventPoint(event));
+                }
                 break;
-            }
-            case MotionEvent.ACTION_MOVE: {
+            case MotionEvent.ACTION_MOVE:
                 mouseDragged = true;
-                selectedShapes.updateShapes(
-                        "Offset",
-                        null,
-                        event.getX() - currentMousePosition.x,
-                        event.getY() - currentMousePosition.y);
-                currentMousePosition = getEventPoint(event);
-                invalidate();
-                break;
-            }
-            case MotionEvent.ACTION_UP: {
-                deselectShapes();
-                if (mouseDragged) {
-                    diagramMode = "Drawing";
+                if (deleteMode) {
+                    handDrawnShapes.updateCurrentShape("Add", getEventPoint(event));
                 }
                 else {
-                    if (!selectShapeAtPoint(getEventPoint(event))) {
-                        diagramMode = "Drawing";
-                    }
+                    selectedShapes.updateShapes(
+                            "Offset",
+                            null,
+                            event.getX() - currentMousePosition.x,
+                            event.getY() - currentMousePosition.y);
+                    connectors.updateConnectors("Reconnect",-1, selectedShapes.shapes);
+                    currentMousePosition = getEventPoint(event);
                 }
                 invalidate();
                 break;
-            }
+            case MotionEvent.ACTION_UP:
+                switch (getGesture(event)) {
+                    case "Click":
+                        deselectShapes();
+                        if (!selectShapeAtPoint(getEventPoint(event))) {
+                            diagramMode = "Drawing";
+                        }
+                        break;
+                    case "Strike-through":
+                        normalShapes.updateShapes("Delete", selectedShapes);
+                        selectedShapes.deleteShapes();
+                        handDrawnShapes.deleteShapes();
+                        connectors.updateConnectors(
+                                "Remove Broken Connectors",
+                                -1,
+                                null);
+                        diagramMode = "Drawing";
+                        break;
+                    case "Drag":
+                        if (deleteMode) {
+                            handDrawnShapes.deleteShapes();
+                        }
+                        break;
+                }
+                deleteMode = false;
+                mouseDragged = false;
+                invalidate();
+                break;
         }
     }
 
+    /*
+     * ============================================================================================
+     * |                                                                                          |
+     * |                                   Utility Functions                                      |
+     * |                                                                                          |
+     * ============================================================================================
+     */
+
     /* ***********************************************************************
-     * Select the shape at the specified point, if found, by moving it from
-     * normalShapes to selectedShapes. Return boolean indicating if found or
-     * not.
+     * Determine if specified connectorShape connects two different shapes
+     * (i.e. starts inside of one currentShape and ends at another), and if so
+     * return those connecting shapes.
+     *************************************************************************/
+
+    private Shape[] getConnectingShapes(Shape connectorShape) {
+        Shape[] connectingShapes = null;
+
+        Point startPoint = connectorShape.getVertices().get(0);
+        Point endPoint = connectorShape.getVertices().get(connectorShape.getSize() - 1);
+        for (Shape startShape : normalShapes.shapes) {
+            if (startShape.shapeEnclosesPoint(startPoint)) {
+                for (Shape endShape : normalShapes.shapes) {
+                    if (endShape.shapeEnclosesPoint(endPoint) && endShape != startShape) {
+                        connectingShapes = new Shape[2];
+                        connectingShapes[0] = startShape;
+                        connectingShapes[1] = endShape;
+                        break;
+                    }
+                }
+            }
+            if (connectingShapes != null) break;
+        }
+        return connectingShapes;
+    }
+
+    /* ***********************************************************************
+     * Select the currentShape at the specified point, if found, by moving it
+     * from normalShapes to selectedShapes. Return boolean indicating if found
+     * or not.
      *************************************************************************/
 
     private boolean selectShapeAtPoint(Point point) {
-        boolean shapeSelected = false;
-        for (Shape shape : normalShapes.shapes) {
-            if (shape.shapeEnclosesPoint(point)) {
-                selectedShapes.updateShapes("Add", shape);
-                normalShapes.updateShapes("Delete", shape);
-                shapeSelected = true;
-                break;
-            }
+        Shape shapeAtPoint = getShapeAtPoint(point, normalShapes);
+        if (shapeAtPoint != null) {
+            selectedShapes.updateShapes("Add", -1, shapeAtPoint);
+            normalShapes.updateShapes("Delete", -1, shapeAtPoint);
         }
-        return shapeSelected;
+        return (shapeAtPoint != null);
     }
 
     /* ***********************************************************************
@@ -298,7 +555,34 @@ public class DiagramView extends View {
 
     private void deselectShapes() {
         normalShapes.updateShapes("Add", selectedShapes);
-        selectedShapes.clear();
+        selectedShapes.deleteShapes();
+    }
+
+    /* ***********************************************************************
+     * Add a connector to connectors that connects the two specified
+     * connectingShapes.
+     *************************************************************************/
+
+    private void connectShapes(Shape[] connectingShapes) {
+        ArrayList<Shape> connectingShapesList = new ArrayList<>();
+        connectingShapesList.add(connectingShapes[0]);
+        connectingShapesList.add(connectingShapes[1]);
+        connectors.updateConnectors("Add", -1, connectingShapesList);
+    }
+
+    /* ***********************************************************************
+     * Return the currentShape at the specified point.
+     *************************************************************************/
+
+    private Shape getShapeAtPoint(Point point, DiagramShapes shapes) {
+        Shape shapeAtPoint = null;
+        for (Shape shape : shapes.shapes) {
+            if (shape.shapeEnclosesPoint(point)) {
+                shapeAtPoint = shape;
+                break;
+            }
+        }
+        return shapeAtPoint;
     }
 
     /* ***********************************************************************
@@ -316,10 +600,10 @@ public class DiagramView extends View {
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
-        canvas.drawPath(handDrawnShapes.shapes_Path, handDrawnShapes.shape_Attributes);
-        canvas.drawPath(handDrawnShapes.shape_Path, handDrawnShapes.shape_Attributes);
-
         canvas.drawPath(normalShapes.shapes_Path, normalShapes.shape_Attributes);
+        canvas.drawPath(connectors.shapes_Path, connectors.shape_Attributes);
         canvas.drawPath(selectedShapes.shapes_Path, selectedShapes.shape_Attributes);
+        canvas.drawPath(handDrawnShapes.shapes_Path, handDrawnShapes.shape_Attributes);
+        canvas.drawPath(handDrawnShapes.currentShape_Path, handDrawnShapes.shape_Attributes);
     }
 }

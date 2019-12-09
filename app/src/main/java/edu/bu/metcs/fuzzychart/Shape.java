@@ -54,6 +54,14 @@ class Shape {
         return circumference;
     }
 
+    Point getCenterPoint() {
+        double min_X = findShapeMinOrMax("Min", "X");
+        double max_X = findShapeMinOrMax("Max", "X");
+        double min_Y = findShapeMinOrMax("Min", "Y");
+        double max_Y = findShapeMinOrMax("Max", "Y");
+        return new Point((int)((min_X + max_X) / 2), (int)((min_Y + max_Y) / 2));
+    }
+
     void clear() {
         vertices.clear();
         shapeType = null;
@@ -75,7 +83,7 @@ class Shape {
         else if (getSize() == 4) {
             shapeType = "Triangle";
         }
-        else if (getSize() >= 9) {
+        else if (getSize() >= 8) {
             double longestSegmentLength = findShapeMinOrMax("Max", "Segment Length");
             double circumference = getCircumference();
             if (longestSegmentLength / circumference < 0.2) {
@@ -181,6 +189,26 @@ class Shape {
         return graphUtilities.getPointsDistance(vertices.get(0),
                 vertices.get(getSize() - 1))
                 <= MAX_CLOSED_SHAPE_END_POINTS_DISTANCE;
+    }
+
+    boolean shapeOverlaysShape(Shape overlaidShape) {
+        Shape[] shape = {this, overlaidShape};
+        double[] max_X = new double[2];
+        double[] max_Y = new double[2];
+        double[] min_X = new double[2];
+        double[] min_Y = new double[2];
+
+        for (int shapeNum = 0; shapeNum < 2; shapeNum++) {
+            max_X[shapeNum] = shape[shapeNum].findShapeMinOrMax("Max", "X");
+            max_Y[shapeNum] = shape[shapeNum].findShapeMinOrMax("Max", "Y");
+            min_X[shapeNum] = shape[shapeNum].findShapeMinOrMax("Min", "X");
+            min_Y[shapeNum] = shape[shapeNum].findShapeMinOrMax("Min", "Y");
+        }
+        int X_firstShapeNum = (max_X[0] > max_X[1]) ? 0 : 1;
+        int Y_firstShapeNum = (max_Y[0] > max_Y[1]) ? 0 : 1;
+
+        return min_X[X_firstShapeNum] <= max_X[1 - X_firstShapeNum]
+            && (min_Y[Y_firstShapeNum] <= max_Y[1 - Y_firstShapeNum]);
     }
 
     boolean shapeEnclosesPoint(Point point) {
