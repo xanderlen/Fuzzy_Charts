@@ -9,6 +9,7 @@ import java.util.Arrays;
 class Shape {
     private static Shape shape;
     private String shapeType;
+    private String shapeText;
     private ArrayList<Point> vertices;
     private GraphUtilities graphUtilities = GraphUtilities.getGraphUtilities();
     private final double MAX_CURVATURE_DEVIATION = 45;
@@ -21,12 +22,22 @@ class Shape {
 
     Shape() {
         this.shapeType = null;
+        this.shapeText = null;
         this.vertices = new ArrayList<>();
     }
 
     Shape(String shapeType, ArrayList<Point> vertices) {
         this.shapeType = shapeType;
+        this.shapeText = null;
         this.vertices = vertices;
+    }
+
+    void setShapeText(String text) {
+        this.shapeText = text;
+    }
+
+    String getShapeText() {
+        return this.shapeText;
     }
 
     String getShapeType() {

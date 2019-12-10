@@ -1,17 +1,20 @@
 package edu.bu.metcs.fuzzychart;
 
+import android.app.AlertDialog;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.Point;
+import android.text.InputType;
+import android.text.TextPaint;
 import android.view.MotionEvent;
 import android.view.View;
+import android.widget.EditText;
 
-import java.lang.reflect.Array;
 import java.util.ArrayList;
-import java.util.Arrays;
 
 public class DiagramView extends View {
     private Controller controller = Controller.getController();
@@ -20,6 +23,9 @@ public class DiagramView extends View {
     private boolean deleteMode = false;
     private boolean mouseDragged;
     private Point currentMousePosition;
+    private double firstClick_StartTime = 0;
+    private double secondClickStartTime = 0;
+    private double thirdClickStartTime = 0;
 
     public DiagramView(Context context) {
         super(context);
@@ -41,7 +47,7 @@ public class DiagramView extends View {
     private class DiagramShapes {
         ArrayList<Shape> shapes;
         Path shapes_Path;
-        Paint shape_Attributes;
+        TextPaint shape_Attributes;
 
         Shape currentShape;
         Path currentShape_Path;
@@ -53,11 +59,13 @@ public class DiagramView extends View {
             currentShape = new Shape();
             currentShape_Path = new Path();
 
-            shape_Attributes = new Paint();
+            shape_Attributes = new TextPaint();
             shape_Attributes.setAntiAlias(true);
             shape_Attributes.setStyle(Paint.Style.STROKE);
             shape_Attributes.setColor(Color.BLUE);
-            shape_Attributes.setStrokeWidth(5);
+            shape_Attributes.setStrokeWidth(3);
+            shape_Attributes.setTextSize(55);
+            shape_Attributes.setTextAlign(Paint.Align.CENTER);
         }
 
         /* ************************************************
@@ -132,6 +140,10 @@ public class DiagramView extends View {
                     shapes_Path = convertShapesToPath(shapes);
                     break;
             }
+        }
+
+        void updateShapesText(String text, int shapeNum) {
+            shapes.get(shapeNum).setShapeText(text);
         }
 
         /* ************************************************
@@ -281,8 +293,7 @@ public class DiagramView extends View {
                  connectorCount++) {
                 if (connectedShapes == null
                         || connectedShapes.contains(firstConnectingShapes.get(connectorCount))
-                        || connectedShapes.contains(secondConnectingShapes.get(connectorCount)))
-                {
+                        || connectedShapes.contains(secondConnectingShapes.get(connectorCount))) {
 
                     Shape[] connectingShapes = new Shape[]{
                             firstConnectingShapes.get(connectorCount),
@@ -299,7 +310,8 @@ public class DiagramView extends View {
                             for (int nextClosestPointNum = 0; nextClosestPointNum < 2; nextClosestPointNum++) {
                                 double minConnectorDistance = Double.MAX_VALUE;
                                 for (Point vertex : connectingShapes[connectorShapeNum].getVertices()) {
-                                    if (!vertex.equals(nextClosestPoint[0])) {
+                                    if (connectingShapes[connectorShapeNum].getShapeType().equals("Diamond")
+                                            || !vertex.equals(nextClosestPoint[0])) {
                                         double connectorDistance = graphUtilities.getPointsDistance(
                                                 connectorPoint[1 - connectorShapeNum],
                                                 vertex);
@@ -376,7 +388,15 @@ public class DiagramView extends View {
     private String getGesture(MotionEvent event) {
         String gesture = "None";
         if (event.getAction() == MotionEvent.ACTION_UP && !mouseDragged) {
-            gesture = "Click";
+            if (System.currentTimeMillis() - thirdClickStartTime <= 500) {
+                gesture = "Triple Click";
+            }
+            else if (System.currentTimeMillis() - secondClickStartTime <= 500) {
+                gesture = "Double Click";
+            }
+            else {
+                gesture = "Click";
+            }
         }
         else if (diagramMode.equals("Selection") && deleteMode) {
             Shape processedShape = controller.processHandDrawnShape(handDrawnShapes.currentShape);
@@ -401,6 +421,17 @@ public class DiagramView extends View {
     private void processDrawingEvent(MotionEvent event) {
         switch (event.getAction()) {
             case MotionEvent.ACTION_DOWN:
+                if (System.currentTimeMillis() - secondClickStartTime <= 250) {
+                    thirdClickStartTime = System.currentTimeMillis();
+                }
+                else if (System.currentTimeMillis() - firstClick_StartTime <= 250) {
+                    secondClickStartTime = System.currentTimeMillis();
+                    thirdClickStartTime = 0;
+                }
+                else {
+                    firstClick_StartTime = System.currentTimeMillis();
+                    secondClickStartTime = 0;
+                }
                 mouseDragged = false;
                 handDrawnShapes.updateCurrentShape("New", getEventPoint(event));
                 break;
@@ -416,16 +447,30 @@ public class DiagramView extends View {
                             diagramMode = "Selection";
                         }
                         break;
+                    case "Double Click":
+                        if (selectShapeAtPoint(getEventPoint(event))) {
+                            diagramMode = "Selection";
+                            enterText();
+                        }
+                        break;
+                    case "Triple Click":
+                        confirmClearDiagram();
+                        break;
                     case "Drag":
                         Shape[] connectingShapes = (getConnectingShapes(handDrawnShapes.currentShape));
                         if (connectingShapes != null) {
                             connectShapes(connectingShapes);
                         }
                         else {
-                            normalShapes.updateShapes(
-                                    "Add",
-                                    -1,
-                                    controller.processHandDrawnShape(handDrawnShapes.currentShape));
+                            Shape processedShape = controller.processHandDrawnShape(handDrawnShapes.currentShape);
+                            if (processedShape.getShapeType().equals("Dot")) {
+                                if (selectShapeAtPoint(getEventPoint(event))) {
+                                    diagramMode = "Selection";
+                                }
+                            }
+                            else {
+                                normalShapes.updateShapes("Add", -1, processedShape);
+                            }
                         }
                         handDrawnShapes.deleteShapes();
                         break;
@@ -443,6 +488,13 @@ public class DiagramView extends View {
     private void processSelectionEvent(MotionEvent event) {
         switch (event.getAction()) {
             case MotionEvent.ACTION_DOWN:
+                if (System.currentTimeMillis() - firstClick_StartTime <= 250) {
+                    secondClickStartTime = System.currentTimeMillis();
+                }
+                else {
+                    firstClick_StartTime = System.currentTimeMillis();
+                    secondClickStartTime = 0;
+                }
                 mouseDragged = false;
                 deleteMode = false;
                 currentMousePosition = getEventPoint(event);
@@ -462,7 +514,7 @@ public class DiagramView extends View {
                             null,
                             event.getX() - currentMousePosition.x,
                             event.getY() - currentMousePosition.y);
-                    connectors.updateConnectors("Reconnect",-1, selectedShapes.shapes);
+                    connectors.updateConnectors("Reconnect", -1, selectedShapes.shapes);
                     currentMousePosition = getEventPoint(event);
                 }
                 invalidate();
@@ -472,6 +524,15 @@ public class DiagramView extends View {
                     case "Click":
                         deselectShapes();
                         if (!selectShapeAtPoint(getEventPoint(event))) {
+                            diagramMode = "Drawing";
+                        }
+                        break;
+                    case "Double Click":
+                        deselectShapes();
+                        if (selectShapeAtPoint(getEventPoint(event))) {
+                            enterText();
+                        }
+                        else {
                             diagramMode = "Drawing";
                         }
                         break;
@@ -486,10 +547,16 @@ public class DiagramView extends View {
                         diagramMode = "Drawing";
                         break;
                     case "Drag":
-                        if (deleteMode) {
+                        if (handDrawnShapes.currentShape != null && handDrawnShapes.currentShape.getSize() > 0) {
+                            Shape processedShape = controller.processHandDrawnShape(handDrawnShapes.currentShape);
                             handDrawnShapes.deleteShapes();
+                            if (processedShape.getShapeType().equals("Dot")) {
+                                deselectShapes();
+                                if (!selectShapeAtPoint(getEventPoint(event))) {
+                                    diagramMode = "Drawing";
+                                }
+                            }
                         }
-                        break;
                 }
                 deleteMode = false;
                 mouseDragged = false;
@@ -505,6 +572,58 @@ public class DiagramView extends View {
      * |                                                                                          |
      * ============================================================================================
      */
+
+    /* ***********************************************************************
+     * Enter text for selected shape.
+     *************************************************************************/
+
+    void enterText() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
+        builder.setTitle("Enter Text");
+        final EditText input = new EditText(getContext());
+        input.setInputType(InputType.TYPE_CLASS_TEXT);
+        builder.setView(input);
+        builder.setPositiveButton("OK", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                selectedShapes.updateShapesText(input.getText().toString(), 0);
+                invalidate();
+            }
+        });
+        builder.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                dialog.cancel();
+            }
+        });
+        builder.show();
+    }
+
+    /* ***********************************************************************
+     * Enter text for selected shape.
+     *************************************************************************/
+
+    void confirmClearDiagram() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
+        builder.setTitle("Confirm Clear Diagram");
+        builder.setPositiveButton("OK", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                normalShapes = new NormalShapes();
+                selectedShapes = new SelectedShapes();
+                handDrawnShapes = new HandDrawnShapes();
+                connectors = new Connectors();
+                invalidate();
+            }
+        });
+        builder.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                dialog.cancel();
+            }
+        });
+        builder.show();
+    }
 
     /* ***********************************************************************
      * Determine if specified connectorShape connects two different shapes
@@ -605,5 +724,26 @@ public class DiagramView extends View {
         canvas.drawPath(selectedShapes.shapes_Path, selectedShapes.shape_Attributes);
         canvas.drawPath(handDrawnShapes.shapes_Path, handDrawnShapes.shape_Attributes);
         canvas.drawPath(handDrawnShapes.currentShape_Path, handDrawnShapes.shape_Attributes);
+        DiagramShapes diagramShapes = normalShapes;
+        drawText(canvas, diagramShapes);
+        diagramShapes = selectedShapes;
+        drawText(canvas, diagramShapes);
+    }
+
+    void drawText(Canvas canvas, DiagramShapes diagramShapes) {
+        for (int shapeNum = 0; shapeNum < diagramShapes.shapes.size(); shapeNum++) {
+            if (diagramShapes.shapes.get(shapeNum).getShapeText() != null) {
+                Point centerPoint = diagramShapes.shapes.get(shapeNum).getCenterPoint();
+                int y_offset = 20;
+                if (diagramShapes.shapes.get(shapeNum).getShapeType().equals("Triangle")) {
+                    y_offset = 75;
+                }
+                canvas.drawText(
+                        diagramShapes.shapes.get(shapeNum).getShapeText(),
+                        centerPoint.x,
+                        centerPoint.y + y_offset,
+                        diagramShapes.shape_Attributes);
+            }
+        }
     }
 }
